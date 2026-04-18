@@ -90,4 +90,3 @@ The exact result depends on the current facts and the search order.
 
 - The project is intentionally small and self-contained, so it can be used for coursework, experimentation, or as a starting point for more advanced timetabling rules.
 - The search space grows quickly as you add more courses, rooms, and time slots, so larger instances may need extra heuristics or pruning.
-"# campus_scheduler" 
