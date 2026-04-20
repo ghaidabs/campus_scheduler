@@ -9,6 +9,8 @@
 %% ============================================================
 
 :- [facts, constraints, scheduler, optimization].
+:- use_module(library(http/json)).
+
 
 
 %% ============================================================
@@ -102,3 +104,61 @@ run_optimal :-
 %% Aliases
 go         :- run.
 go_optimal :- run_optimal.
+
+
+%% ============================================================
+%%  HTML GENERATION
+%% ============================================================
+
+%% Converts a schedule term into a Prolog dict suitable for library(http/json).
+assign_to_dict(assign(Course, Session, Room, slot(Day, Period)),
+               json{course:Course, session:Session, room:Room, day:Day, period:Period}).
+
+%% Generates JSON string from schedule.
+schedule_to_json(Schedule, JsonString) :-
+    maplist(assign_to_dict, Schedule, Dicts),
+    with_output_to(string(JsonString), json_write_dict(current_output, Dicts, [width(0)])).
+
+%% Replaces the schedule in the HTML template.
+replace_schedule(Template, JsonLine, Result) :-
+    sub_string(Template, BeforeLen, _, _, "const SCHEDULE = ["),
+    sub_string(Template, 0, BeforeLen, _, BeforeText),
+    sub_string(Template, BeforeLen, _, 0, RestText),
+    once(sub_string(RestText, _, 2, AfterLen, "];")),
+    sub_string(RestText, _, AfterLen, 0, AfterText),
+    string_concat(BeforeText, "const SCHEDULE = ", T1),
+    string_concat(T1, JsonLine, T2),
+    string_concat(T2, ";", T3),
+    string_concat(T3, AfterText, Result).
+
+%% Main HTML generation predicate.
+generate_html_schedule(Schedule, Filename) :-
+    (   read_file_to_string('timetable.html', Template, [])
+    ->  schedule_to_json(Schedule, Json),
+        (   replace_schedule(Template, Json, FinalHTML)
+        ->  open(Filename, write, Out),
+            write(Out, FinalHTML),
+            close(Out),
+            format("  Success! HTML schedule generated: ~w~n", [Filename])
+        ;   write("  Error: Could not find SCHEDULE block in template.~n")
+        )
+    ;   write("  Error: Could not read timetable.html. Ensure it exists in the current directory.~n")
+    ).
+
+%% Optimized run for HTML output.
+run_html :-
+    div,
+    write('  INSAT Timetable -- finding optimized schedule for HTML'), nl,
+    div,
+    N = 200,
+    (   best_of_n(N, Best, Score)
+    ->  nl,
+        format("  BEST SCHEDULE (score ~4f) found.~n", [Score]),
+        generate_html_schedule(Best, 'schedule_output.html'),
+        div,
+        print_metrics(Best), nl
+    ;   write('  No valid schedule found.'), nl
+    ).
+
+%% Alias
+go_html :- run_html.
