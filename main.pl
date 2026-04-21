@@ -5,11 +5,10 @@
 %%    ?- [main].           %% load all modules
 %%    ?- run.              %% find ONE valid schedule (fast)
 %%    ?- run_optimal.      %% find BEST schedule via best-of-200
-%%    ?- go.               %% alias for run/0
 %% ============================================================
 
 :- [facts, constraints, scheduler, optimization].
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 
 
@@ -61,6 +60,61 @@ print_metrics(Schedule) :-
 
 
 %% ============================================================
+%%  TRACK MEMBERSHIP  -- classify groups into MPI / CBA
+%% ============================================================
+
+mpi_group(g_mpi1_cm).
+mpi_group(g_mpi1a).
+mpi_group(g_mpi1b).
+
+cba_group(g_cba1_cm).
+cba_group(g_cba1a).
+cba_group(g_cba1b).
+
+%% True when Course belongs to the given Track (mpi / cba).
+course_track(Course, mpi) :-
+    course(Course, Group, _, _, _),
+    mpi_group(Group), !.
+course_track(Course, cba) :-
+    course(Course, Group, _, _, _),
+    cba_group(Group), !.
+
+%% Filter a schedule to keep only assignments for a track.
+filter_track([], _, []).
+filter_track([assign(Course, S, R, Slot) | Rest], Track, [assign(Course, S, R, Slot) | Filtered]) :-
+    course_track(Course, Track), !,
+    filter_track(Rest, Track, Filtered).
+filter_track([_ | Rest], Track, Filtered) :-
+    filter_track(Rest, Track, Filtered).
+
+%% Sort assignments by Day (Mon-Fri) then Period within each day.
+assign_key(A, Key-A) :-
+    A = assign(_, _, _, slot(Day, P)),
+    day_order(Day, D),
+    Key is D * 100 + P.
+
+sort_schedule(Unsorted, Sorted) :-
+    maplist(assign_key, Unsorted, Keyed),
+    keysort(Keyed, SortedKeyed),
+    pairs_values(SortedKeyed, Sorted).
+
+%% Print a single track timetable with a banner.
+print_track_schedule(Schedule, Track, Label) :-
+    filter_track(Schedule, Track, Sub),
+    sort_schedule(Sub, Sorted),
+    nl, div,
+    format("  ~w TIMETABLE~n", [Label]),
+    header,
+    print_schedule(Sorted),
+    div.
+
+%% Print both track timetables.
+print_grouped_schedules(Schedule) :-
+    print_track_schedule(Schedule, mpi, 'MPI (Maths-Physique-Informatique)'),
+    print_track_schedule(Schedule, cba, 'CBA (Chimie-Biologie Appliquees)').
+
+
+%% ============================================================
 %%  run/0 -- First valid schedule (DFS, instant)
 %% ============================================================
 
@@ -69,9 +123,7 @@ run :-
     write('  INSAT Timetable -- finding first valid schedule'), nl,
     div,
     (   schedule(Schedule)
-    ->  nl, header,
-        print_schedule(Schedule),
-        div,
+    ->  print_grouped_schedules(Schedule),
         print_metrics(Schedule), nl
     ;   write('  No valid schedule found.'), nl
     ).
@@ -91,74 +143,8 @@ run_optimal :-
     div,
     N = 200,
     (   best_of_n(N, Best, Score)
-    ->  nl,
-        format("  BEST SCHEDULE (score ~4f, sampled ~w candidates)~n", [Score, N]),
-        header,
-        print_schedule(Best),
-        div,
+    ->  format("~n  BEST SCHEDULE (score ~4f, sampled ~w candidates)~n", [Score, N]),
+        print_grouped_schedules(Best),
         print_metrics(Best), nl
     ;   write('  No valid schedule found.'), nl
     ).
-
-
-%% Aliases
-go         :- run.
-go_optimal :- run_optimal.
-
-
-%% ============================================================
-%%  HTML GENERATION
-%% ============================================================
-
-%% Converts a schedule term into a Prolog dict suitable for library(http/json).
-assign_to_dict(assign(Course, Session, Room, slot(Day, Period)),
-               json{course:Course, session:Session, room:Room, day:Day, period:Period}).
-
-%% Generates JSON string from schedule.
-schedule_to_json(Schedule, JsonString) :-
-    maplist(assign_to_dict, Schedule, Dicts),
-    with_output_to(string(JsonString), json_write_dict(current_output, Dicts, [width(0)])).
-
-%% Replaces the schedule in the HTML template.
-replace_schedule(Template, JsonLine, Result) :-
-    sub_string(Template, BeforeLen, _, _, "const SCHEDULE = ["),
-    sub_string(Template, 0, BeforeLen, _, BeforeText),
-    sub_string(Template, BeforeLen, _, 0, RestText),
-    once(sub_string(RestText, _, 2, AfterLen, "];")),
-    sub_string(RestText, _, AfterLen, 0, AfterText),
-    string_concat(BeforeText, "const SCHEDULE = ", T1),
-    string_concat(T1, JsonLine, T2),
-    string_concat(T2, ";", T3),
-    string_concat(T3, AfterText, Result).
-
-%% Main HTML generation predicate.
-generate_html_schedule(Schedule, Filename) :-
-    (   read_file_to_string('timetable.html', Template, [])
-    ->  schedule_to_json(Schedule, Json),
-        (   replace_schedule(Template, Json, FinalHTML)
-        ->  open(Filename, write, Out),
-            write(Out, FinalHTML),
-            close(Out),
-            format("  Success! HTML schedule generated: ~w~n", [Filename])
-        ;   write("  Error: Could not find SCHEDULE block in template.~n")
-        )
-    ;   write("  Error: Could not read timetable.html. Ensure it exists in the current directory.~n")
-    ).
-
-%% Optimized run for HTML output.
-run_html :-
-    div,
-    write('  INSAT Timetable -- finding optimized schedule for HTML'), nl,
-    div,
-    N = 200,
-    (   best_of_n(N, Best, Score)
-    ->  nl,
-        format("  BEST SCHEDULE (score ~4f) found.~n", [Score]),
-        generate_html_schedule(Best, 'schedule_output.html'),
-        div,
-        print_metrics(Best), nl
-    ;   write('  No valid schedule found.'), nl
-    ).
-
-%% Alias
-go_html :- run_html.

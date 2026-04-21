@@ -55,9 +55,6 @@ generate_indices(I, N, [I | Rest]) :-
 
 make_pair(Course, Index, Course-Index).
 
-all_courses(Courses) :-
-    findall(C, course(C, _, _, _, _), Courses).
-
 %% Count how many distinct instructor-available slots a course has.
 slot_count(Course, Count) :-
     findall(S, instructor_available(Course, S), Slots),
