@@ -17,11 +17,11 @@
 %% ============================================================
 
 period_label(1, '08h00-09h30').
-period_label(2, '09h30-11h00').
-period_label(3, '11h00-12h30').
+period_label(2, '09h45-11h15').
+period_label(3, '11h30-13h00').
 period_label(5, '14h00-15h30').
-period_label(6, '15h30-17h00').
-period_label(7, '17h00-18h30').
+period_label(6, '15h45-17h15').
+period_label(7, '17h30-19h00').
 
 day_name(monday,    'Monday   ').
 day_name(tuesday,   'Tuesday  ').

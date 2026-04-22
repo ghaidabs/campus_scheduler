@@ -9,11 +9,11 @@ const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const PERIODS = [1, 2, 3, 5, 6, 7];
 const PERIOD_LABELS = {
     1: { num: '1', time: '08:00 – 09:30' },
-    2: { num: '2', time: '09:30 – 11:00' },
-    3: { num: '3', time: '11:00 – 12:30' },
+    2: { num: '2', time: '09:45 – 11:15' },
+    3: { num: '3', time: '11:30 – 13:00' },
     5: { num: '4', time: '14:00 – 15:30' },
-    6: { num: '5', time: '15:30 – 17:00' },
-    7: { num: '6', time: '17:00 – 18:30' },
+    6: { num: '5', time: '15:45 – 17:15' },
+    7: { num: '6', time: '17:30 – 19:00' },
 };
 
 const ROOM_LABELS = {
@@ -147,7 +147,7 @@ function renderTimetable() {
 
         // Insert lunch break divider after period 3
         if (i === 3) {
-            const lunch = el('div', 'grid-lunch', '☕  Lunch Break  ·  12:30 – 14:00');
+            const lunch = el('div', 'grid-lunch', '☕  Lunch Break  ·  13:00 – 14:00');
             $timetable.appendChild(lunch);
         }
 

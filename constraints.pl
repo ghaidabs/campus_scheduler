@@ -39,9 +39,24 @@ no_room_conflict(Room, Slot, Schedule) :-
 %%  HARD CONSTRAINT 2 -- No group-time conflict
 %% ============================================================
 
+%% Groups that share students cannot be scheduled in the same slot.
+%% Subgroups A and B are independent and may run in parallel.
+groups_conflict(g_mpi1_cm, g_mpi1a).
+groups_conflict(g_mpi1_cm, g_mpi1b).
+groups_conflict(g_cba1_cm, g_cba1a).
+groups_conflict(g_cba1_cm, g_cba1b).
+
+same_or_conflicting_groups(G1, G2) :-
+    G1 = G2.
+same_or_conflicting_groups(G1, G2) :-
+    groups_conflict(G1, G2).
+same_or_conflicting_groups(G1, G2) :-
+    groups_conflict(G2, G1).
+
 no_group_conflict(Group, Slot, Schedule) :-
     \+ (member(assign(OtherCourse, _, _, Slot), Schedule),
-        course(OtherCourse, Group, _, _, _)).
+        course(OtherCourse, OtherGroup, _, _, _),
+        same_or_conflicting_groups(Group, OtherGroup)).
 
 
 %% ============================================================
