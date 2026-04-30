@@ -29,7 +29,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                         Browser (Frontend)                         │
+│                         Browser (Frontend)                           │
 │                                                                      │
 │   index.html ──── style.css (Glassmorphism Dark Theme)               │
 │       │                                                              │
@@ -38,7 +38,7 @@
                            │  HTTP / JSON
                            ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│                     Flask Server  (app.py)                          │
+│                     Flask Server  (app.py)                           │
 │                                                                      │
 │   GET /                      → Serve HTML frontend                   │
 │   GET /api/schedule          → Quick DFS schedule                    │
@@ -47,12 +47,12 @@
                            │  pyswip (Python ↔ Prolog FFI)
                            ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│                    SWI-Prolog Engine                                │
+│                    SWI-Prolog Engine                                 │
 │                                                                      │
 │   bridge.pl ─── main.pl ─┬─ facts.pl          (Knowledge Base)       │
-│                           ├─ constraints.pl    (7 Hard Constraints)   │
-│                           ├─ scheduler.pl      (CSP + MCV Search)     │
-│                           └─ optimization.pl   (Scoring & B&B)        │
+│                           ├─ constraints.pl    (7 Hard Constraints)  │
+│                           ├─ scheduler.pl      (CSP + MCV Search)    │
+│                           └─ optimization.pl   (Scoring & B&B)       │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
