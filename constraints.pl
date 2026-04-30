@@ -1,47 +1,66 @@
 %% ============================================================
-%%  constraints.pl — Feasibility Checker
+%%  constraints.pl -- Hard Constraint Checker
 %%
-%%  Design principle: CHECK EARLY, FAIL FAST.
-%%  Every constraint is checked as soon as the information
-%%  needed for it is available — not after a full schedule
-%%  is built. This is what prevents combinatorial explosion.
+%%  BUGS FIXED vs original
+%%  ----------------------
+%%  1. energy_used/4: variable aliasing bug fixed.
+%%     Original: Day in clause head == Day in slot(Day,_) pattern,
+%%     so assignments from OTHER days crashed list traversal.
+%%     Fix: renamed to AssignDay; if-then-else tests explicitly.
+%%
+%%  2. energy_budget_ok/3: Used =< Limit-Cost  =>  Used+Cost =< Limit.
+%%
+%%  3. no_room_conflict/3, no_group_conflict/3: rewritten with
+%%     clean \+/member -- removed broken 4-argument versions.
+%%
+%%  4. equipment_compatible/2: extended for all INSAT equipment
+%%     atoms: amphi_proj, it_lab, chem_lab, bio_lab.
+%%
+%%  NEW CONSTRAINT 7 -- No same-day repetition
+%%  -------------------------------------------
+%%  A course may not have two sessions on the same calendar day.
+%%  This is a real-world pedagogical requirement (you don't teach
+%%  the same course twice in one day) and is the primary fix for
+%%  the Monday-clustering problem in the DFS output.
 %% ============================================================
 
 :- use_module(library(lists)).
 
-%% ============================================================
-%%  HARD CONSTRAINT 1: No room-time conflict
-%%  A room can host at most one session at a time.
-%%
-%%  We check this against the PARTIAL schedule built so far
-%%  (the accumulator). If the new assignment conflicts with
-%%  any existing one, fail immediately and backtrack.
-%% ============================================================
-%% Condition -> Then ; Else
-
-no_room_conflict(_, _, [], _).
-no_room_conflict(Room, Slot, [assign(_, _, OtherRoom, OtherSlot) | Rest], Duration) :-
-    (   Room = OtherRoom, Slot = OtherSlot
-    ->  fail   % Same room, same slot: hard conflict
-    ;   no_room_conflict(Room, Slot, Rest, Duration)
-    ).
 
 %% ============================================================
-%%  HARD CONSTRAINT 2: No group-time conflict
-%%  A student group cannot attend two sessions simultaneously.
+%%  HARD CONSTRAINT 1 -- No room-time conflict
 %% ============================================================
 
-no_group_conflict(_, _, [], _).
-no_group_conflict(Group, Slot, [assign(OtherCourse, _, _, OtherSlot) | Rest], Group) :-
-    (   Slot = OtherSlot,
-        course(OtherCourse, Group, _, _, _)
-    ->  fail
-    ;   no_group_conflict(Group, Slot, Rest, Group)
-    ).
+no_room_conflict(Room, Slot, Schedule) :-
+    \+ member(assign(_, _, Room, Slot), Schedule).
+
 
 %% ============================================================
-%%  HARD CONSTRAINT 3: Room capacity
-%%  Room must hold all students in the group.
+%%  HARD CONSTRAINT 2 -- No group-time conflict
+%% ============================================================
+
+%% Groups that share students cannot be scheduled in the same slot.
+%% Subgroups A and B are independent and may run in parallel.
+groups_conflict(g_mpi1_cm, g_mpi1a).
+groups_conflict(g_mpi1_cm, g_mpi1b).
+groups_conflict(g_cba1_cm, g_cba1a).
+groups_conflict(g_cba1_cm, g_cba1b).
+
+same_or_conflicting_groups(G1, G2) :-
+    G1 = G2.
+same_or_conflicting_groups(G1, G2) :-
+    groups_conflict(G1, G2).
+same_or_conflicting_groups(G1, G2) :-
+    groups_conflict(G2, G1).
+
+no_group_conflict(Group, Slot, Schedule) :-
+    \+ (member(assign(OtherCourse, _, _, Slot), Schedule),
+        course(OtherCourse, OtherGroup, _, _, _),
+        same_or_conflicting_groups(Group, OtherGroup)).
+
+
+%% ============================================================
+%%  HARD CONSTRAINT 3 -- Room capacity
 %% ============================================================
 
 capacity_ok(Room, Group) :-
@@ -49,47 +68,55 @@ capacity_ok(Room, Group) :-
     room(Room, Capacity, _, _),
     Capacity >= Size.
 
+
 %% ============================================================
-%%  HARD CONSTRAINT 4: Equipment compatibility
-%%  Room equipment must match what the course requires.
+%%  HARD CONSTRAINT 4 -- Equipment compatibility
+%%
+%%  Room hierarchy (RoomHas >= CourseNeeds):
+%%    amphi_proj >= amphi_proj, projector, standard
+%%    projector  >= projector, standard
+%%    standard   >= standard  (only)
+%%    it_lab, chem_lab, bio_lab: exact match only
+%%
+%%  equipment_compatible(CourseNeed, RoomHas)
 %% ============================================================
+
+equipment_compatible(standard,   standard).
+equipment_compatible(standard,   projector).
+equipment_compatible(standard,   amphi_proj).
+equipment_compatible(projector,  projector).
+equipment_compatible(projector,  amphi_proj).
+equipment_compatible(amphi_proj, amphi_proj).
+equipment_compatible(it_lab,     it_lab).
+equipment_compatible(chem_lab,   chem_lab).
+equipment_compatible(bio_lab,    bio_lab).
 
 equipment_ok(Room, Course) :-
     course(Course, _, _, _, Required),
     room(Room, _, RoomEquip, _),
     equipment_compatible(Required, RoomEquip).
 
-%% Equipment compatibility rules:
-%% A room with "projector" can host courses needing "standard" too
-%% (it has everything standard rooms have, plus more).
-equipment_compatible(standard,  standard).
-equipment_compatible(standard,  projector).  % projector rooms work for standard too
-equipment_compatible(projector, projector).
-equipment_compatible(lab,       lab).
 
 %% ============================================================
-%%  HARD CONSTRAINT 5: Instructor availability
-%%  The time slot must be in the instructor's available set.
+%%  HARD CONSTRAINT 5 -- Instructor availability
 %% ============================================================
 
 instructor_ok(Course, Slot) :-
     instructor_available(Course, Slot).
 
+
 %% ============================================================
-%%  HARD CONSTRAINT 6: Building energy budget
-%%  Accumulated energy in a building on a given day must not
-%%  exceed the building's daily threshold.
+%%  HARD CONSTRAINT 6 -- Building energy budget
 %%
-%%  This is the trickiest constraint because it requires
-%%  summing over the partial schedule. We pass the current
-%%  energy state as an ACCUMULATOR into the scheduler.
+%%  AssignDay (fresh variable) separates the slot's day from
+%%  the query Day, fixing the original aliasing crash.
 %% ============================================================
 
-%% Compute current energy used in building B on Day from partial schedule
 energy_used([], _, _, 0).
-energy_used([assign(Course, _, Room, slot(Day, _)) | Rest], Building, Day, Total) :-
+energy_used([assign(Course, _, Room, slot(AssignDay, _)) | Rest],
+            Building, Day, Total) :-
     room(Room, _, _, RoomBuilding),
-    (   RoomBuilding = Building
+    (   RoomBuilding = Building, AssignDay = Day
     ->  energy_cost(Room, Cost),
         course(Course, _, _, Duration, _),
         energy_used(Rest, Building, Day, RestTotal),
@@ -102,20 +129,36 @@ energy_budget_ok(Room, Day, PartialSchedule) :-
     building(Building, Limit),
     energy_used(PartialSchedule, Building, Day, Used),
     energy_cost(Room, Cost),
-    Used =< Limit - Cost.   % Check BEFORE adding; leave room for this session
+    Used + Cost =< Limit.
+
 
 %% ============================================================
-%%  ALL HARD CONSTRAINTS combined
-%%  This is called once per candidate assignment.
-%%  If any sub-check fails, Prolog backtracks immediately.
+%%  HARD CONSTRAINT 7 -- No same-day repetition (NEW)
+%%
+%%  A course cannot appear twice on the same calendar day.
+%%  Prevents the DFS from booking both sessions of a course
+%%  into adjacent slots on Monday, which produces a realistic
+%%  but very imbalanced timetable.
+%%
+%%  "If the partial schedule already has a session of Course
+%%   on Day, this new (Course, Day) pair is forbidden."
 %% ============================================================
 
-all_hard_constraints(Course, Session, Room, Slot, PartialSchedule) :-
-    course(Course, Group, _, _, _),          % extract group
-    time_slot(Slot, Day, _),                 % extract day
-    capacity_ok(Room, Group),                % constraint 3
-    equipment_ok(Room, Course),              % constraint 4
-    instructor_ok(Course, Slot),             % constraint 5
-    no_room_conflict(Room, Slot, PartialSchedule, _),   % constraint 1
-    no_group_conflict(Group, Slot, PartialSchedule, _), % constraint 2
-    energy_budget_ok(Room, Day, PartialSchedule).        % constraint 6
+no_same_day_repeat(Course, Day, Schedule) :-
+    \+ (member(assign(Course, _, _, slot(Day, _)), Schedule)).
+
+
+%% ============================================================
+%%  ALL HARD CONSTRAINTS COMBINED
+%% ============================================================
+
+all_hard_constraints(Course, _Session, Room, Slot, PartialSchedule) :-
+    course(Course, Group, _, _, _),
+    time_slot(Slot, Day, _),
+    capacity_ok(Room, Group),
+    equipment_ok(Room, Course),
+    instructor_ok(Course, Slot),
+    no_room_conflict(Room, Slot, PartialSchedule),
+    no_group_conflict(Group, Slot, PartialSchedule),
+    energy_budget_ok(Room, Day, PartialSchedule),
+    no_same_day_repeat(Course, Day, PartialSchedule).   %% NEW

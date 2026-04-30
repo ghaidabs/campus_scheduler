@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INSAT Campus Scheduler — AI-Powered Timetable</title>
+    <meta name="description" content="Interactive timetable scheduler for INSAT, powered by SWI-Prolog constraint satisfaction and multi-criteria optimization.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <!-- ====== HERO ====== -->
+    <header id="hero">
+        <div class="hero-orb hero-orb-1"></div>
+        <div class="hero-orb hero-orb-2"></div>
+        <div class="hero-orb hero-orb-3"></div>
+        <div class="hero-content">
+            <span class="hero-badge">INSAT &times; Prolog Engine</span>
+            <h1>Campus Timetable<br><span class="gradient-text">Scheduler</span></h1>
+            <p class="hero-sub">Constraint satisfaction &amp; multi-criteria optimization for the MPI and CBA departments</p>
+        </div>
+    </header>
+
+    <!-- ====== CONTROLS ====== -->
+    <section id="controls">
+        <div class="controls-inner">
+            <button id="btn-quick" class="btn btn-primary" type="button">
+                <span class="btn-icon">&#9889;</span>
+                <span class="btn-text">
+                    <strong>Quick Schedule</strong>
+                    <small>First valid solution (DFS)</small>
+                </span>
+            </button>
+            <button id="btn-optimal" class="btn btn-accent" type="button">
+                <span class="btn-icon">&#127919;</span>
+                <span class="btn-text">
+                    <strong>Optimal Schedule</strong>
+                    <small>Best of 200 candidates</small>
+                </span>
+            </button>
+        </div>
+    </section>
+
+    <!-- ====== LOADING ====== -->
+    <div id="loading" class="loading hidden">
+        <div class="loader">
+            <div class="loader-ring"></div>
+            <div class="loader-ring"></div>
+            <div class="loader-ring"></div>
+        </div>
+        <p class="loading-text">Running Prolog solver&hellip;</p>
+        <p class="loading-hint">Exploring the constraint search space</p>
+    </div>
+
+    <!-- ====== ERROR ====== -->
+    <div id="error" class="error-banner hidden">
+        <span class="error-icon">&#9888;&#65039;</span>
+        <span id="error-msg">No valid schedule could be found.</span>
+    </div>
+
+    <!-- ====== TOAST ====== -->
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- ====== MAIN ====== -->
+    <main id="main-content" class="hidden">
+
+        <!-- Track Tabs -->
+        <nav id="track-tabs" aria-label="Department timetable selector">
+            <button class="tab active" data-track="mpi" type="button">
+                <span class="tab-indicator"></span>
+                <span class="tab-label">MPI</span>
+                <span class="tab-desc">Maths · Physique · Informatique</span>
+            </button>
+            <button class="tab" data-track="cba" type="button">
+                <span class="tab-indicator"></span>
+                <span class="tab-label">CBA</span>
+                <span class="tab-desc">Chimie · Biologie Appliquées</span>
+            </button>
+        </nav>
+
+        <!-- Subgroup Filter -->
+        <div id="filters" aria-label="Session filter">
+            <button class="filter-btn active" data-filter="all" type="button">All Sessions</button>
+            <button class="filter-btn" data-filter="cm" type="button">CM Only</button>
+            <button class="filter-btn" data-filter="a" type="button">Group A</button>
+            <button class="filter-btn" data-filter="b" type="button">Group B</button>
+        </div>
+
+        <!-- Timetable -->
+        <div id="timetable-wrapper">
+            <div id="timetable"></div>
+        </div>
+
+        <!-- Legend -->
+        <div id="legend">
+            <span class="legend-title">Legend</span>
+            <div class="legend-items">
+                <span class="legend-item"><span class="legend-swatch cm"></span> CM — Cours Magistral</span>
+                <span class="legend-item"><span class="legend-swatch tp"></span> TP — Travaux Pratiques</span>
+                <span class="legend-item"><span class="legend-swatch td"></span> TD — Travaux Dirigés</span>
+            </div>
+        </div>
+
+        <!-- Metrics -->
+        <section id="metrics">
+            <h2 class="section-title">Optimization Metrics</h2>
+            <div class="metrics-grid">
+                <div class="metric-card" id="card-energy">
+                    <div class="metric-icon-wrap energy"><span>&#9889;</span></div>
+                    <div class="metric-body">
+                        <div class="metric-value" id="m-energy">&mdash;</div>
+                        <div class="metric-label">Total Energy</div>
+                        <div class="metric-unit">units</div>
+                    </div>
+                </div>
+                <div class="metric-card" id="card-imbalance">
+                    <div class="metric-icon-wrap imbalance"><span>&#9878;&#65039;</span></div>
+                    <div class="metric-body">
+                        <div class="metric-value" id="m-imbalance">&mdash;</div>
+                        <div class="metric-label">Daily Imbalance</div>
+                        <div class="metric-unit">units</div>
+                    </div>
+                </div>
+                <div class="metric-card" id="card-variance">
+                    <div class="metric-icon-wrap variance"><span>&#128202;</span></div>
+                    <div class="metric-body">
+                        <div class="metric-value" id="m-variance">&mdash;</div>
+                        <div class="metric-label">Room Variance</div>
+                        <div class="metric-unit">&sigma;&sup2;</div>
+                    </div>
+                </div>
+                <div class="metric-card highlight" id="card-score">
+                    <div class="metric-icon-wrap score"><span>&#127942;</span></div>
+                    <div class="metric-body">
+                        <div class="metric-value" id="m-score">&mdash;</div>
+                        <div class="metric-label">Combined Score</div>
+                        <div class="metric-unit">lower is better</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ====== FOOTER ====== -->
+    <footer id="footer">
+        <p>INSAT Campus Scheduler &bull; Powered by <strong>SWI-Prolog</strong> &times; <strong>Python</strong> &times; <strong>Flask</strong></p>
+        <p class="footer-sub">Constraint-based AI scheduling &mdash; <span id="footer-year">2026</span></p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
